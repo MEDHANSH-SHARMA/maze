@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Puddle Maze</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #f0f8ff;
+            padding: 20px;
+        }
+        h1 {
+            color: #0066cc;
+            margin-bottom: 10px;
+        }
+        .game-container {
+            margin-top: 20px;
+            position: relative;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(10, 50px);
+            grid-template-rows: repeat(10, 50px);
+            gap: 2px;
+        }
+        .cell {
+            width: 50px;
+            height: 50px;
+            border: 1px solid #ccc;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-weight: bold;
+            font-size: 20px;
+            cursor: pointer;
+            background-color: #e6f7ff;
+            transition: all 0.2s;
+        }
+        .puddle {
+            background-color: #0099ff;
+        }
+        .player {
+            background-color: #66cc99;
+        }
+        .player.puddle {
+            background-color: #ff6666;
+        }
+        .start {
+            background-color: #99ff99;
+        }
+        .end {
+            background-color: #ff9966;
+        }
+        .controls {
+            margin-top: 20px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        button {
+            padding: 10px 15px;
+            background-color: #0066cc;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #0055aa;
+        }
+        .game-info {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: white;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            max-width: 520px;
+        }
+        .win-message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(255, 255, 255, 0.9);
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.3);
+            text-align: center;
+            z-index: 10;
+            display: none;
+        }
+        .win-message h2 {
+            color: #008800;
+            margin-top: 0;
+        }
+        .moves-counter {
+            margin-top: 10px;
+            font-weight: bold;
+            font-size: 18px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Puddle Maze</h1>
+    <div class="moves-counter">Moves: <span id="moves">0</span></div>
+    <div class="game-container">
+        <div class="grid" id="grid"></div>
+        <div class="win-message" id="winMessage">
+            <h2>Maze Completed!</h2>
+            <p>You reached the end in <span id="finalMoves">0</span> moves.</p>
+            <button id="playAgain">Play Again</button>
+        </div>
+    </div>
+    <div class="controls">
+        <button id="up">↑ Up</button>
+        <button id="left">← Left</button>
+        <button id="right">→ Right</button>
+        <button id="down">↓ Down</button>
+        <button id="reset">Reset</button>
+    </div>
+    <div class="game-info">
+        <p>Navigate through the maze from the <strong>green start</strong> to the <strong>orange finish</strong>. Avoid stepping in puddles!</p>
+        <p><strong>Green:</strong> Player | <strong>Blue:</strong> Puddle | <strong>Red:</strong> Player in puddle</p>
+    </div>
+
+    <script>
+        // Game constants
+        const GRID_SIZE = 10;
+        const PUDDLES = [
+            { size: 3, width: 3, height: 3 },
+            { size: 2, width: 2, height: 2 },
+            { size: 2, width: 2, height: 2 }
+        ];
+        const START_POS = { x: 0, y: 0 };
+        const END_POS = { x: 9, y: 9 };
+
+        // Game state
+        let grid = [];
+        let playerPosition = { x: START_POS.x, y: START_POS.y };
+        let puddlePositions = [];
+        let moveCount = 0;
+        let gameWon = false;
+
+        // Initialize the game
+        function initGame() {
+            createGrid();
+            placePuddlesStrategically();
+            placePlayer(START_POS.x, START_POS.y);
+            moveCount = 0;
+            gameWon = false;
+            updateMoveCounter();
+            document.getElementById('winMessage').style.display = 'none';
+            renderGrid();
+        }
+
+        // Create empty grid
+        function createGrid() {
+            grid = Array(GRID_SIZE).fill().map(() => Array(GRID_SIZE).fill(0));
+            
+            // Mark start and end positions
+            grid[START_POS.y][START_POS.x] = 2; // 2 represents start
+            grid[END_POS.y][END_POS.x] = 3;    // 3 represents end
+        }
+
+        // Place puddles in strategic positions to create a maze-like challenge
+        function placePuddlesStrategically() {
+            puddlePositions = [];
+            
+            // Place the 3x3 puddle in the upper right quadrant
+            placePuddleAt(1, 5, 3, 3);
+            
+            // Place first 2x2 puddle in the lower left quadrant
+            placePuddleAt(4, 2, 2, 2);
+            
+            // Place second 2x2 puddle near the middle-right
+            placePuddleAt(6, 6, 2, 2);
+
+            placePuddleAt(9, 4, 1, 2);
+            placePuddleAt(2, 9, 2, 1);
+            placePuddleAt(8, 8, 1, 1);
+        }
+        
+        // Helper function to place puddle at specific coordinates
+        function placePuddleAt(x, y, width, height) {
+            for (let i = 0; i < height; i++) {
+                for (let j = 0; j < width; j++) {
+                    // Don't overwrite start or end positions
+                    if (grid[y + i][x + j] === 0) {
+                        grid[y + i][x + j] = 1; // 1 represents puddle
+                    }
+                }
+            }
+            puddlePositions.push({ x, y, width, height });
+        }
+
+        // Place player at specified position
+        function placePlayer(x, y) {
+            playerPosition = { x, y };
+        }
+
+        // Update move counter
+        function updateMoveCounter() {
+            document.getElementById('moves').textContent = moveCount;
+        }
+
+        // Move player in a direction
+        function movePlayer(dx, dy) {
+            if (gameWon) return;
+            
+            const newX = playerPosition.x + dx;
+            const newY = playerPosition.y + dy;
+            
+            // Check if the move is valid (within grid)
+            if (newX >= 0 && newX < GRID_SIZE && newY >= 0 && newY < GRID_SIZE) {
+                placePlayer(newX, newY);
+                moveCount++;
+                updateMoveCounter();
+                renderGrid();
+                
+                // Check if player reached the end
+                if (newX === END_POS.x && newY === END_POS.y) {
+                    winGame();
+                }
+            }
+        }
+
+        // Win the game
+        function winGame() {
+            gameWon = true;
+            document.getElementById('finalMoves').textContent = moveCount;
+            document.getElementById('winMessage').style.display = 'block';
+        }
+
+        // Render the grid
+        function renderGrid() {
+            const gridElement = document.getElementById("grid");
+            gridElement.innerHTML = "";
+            
+            for (let y = 0; y < GRID_SIZE; y++) {
+                for (let x = 0; x < GRID_SIZE; x++) {
+                    const cell = document.createElement("div");
+                    cell.className = "cell";
+                    
+                    // Start position
+                    if (grid[y][x] === 2) {
+                        cell.classList.add("start");
+                    }
+                    
+                    // End position
+                    if (grid[y][x] === 3) {
+                        cell.classList.add("end");
+                        cell.textContent = "🏁";
+                    }
+                    
+                    // Puddle
+                    if (grid[y][x] === 1) {
+                        cell.classList.add("puddle");
+                    }
+                    
+                    // Player
+                    if (x === playerPosition.x && y === playerPosition.y) {
+                        cell.classList.add("player");
+                        
+                        // Different icons based on situation
+                        if (grid[y][x] === 1) {
+                            cell.textContent = "😢"; // Sad in puddle
+                        } else if (grid[y][x] === 3) {
+                            cell.textContent = "🎉"; // Celebration at end
+                        } else {
+                            cell.textContent = "😊"; // Normal
+                        }
+                    }
+                    
+                    // Add coordinates as data attributes
+                    cell.dataset.x = x;
+                    cell.dataset.y = y;
+                    
+                    gridElement.appendChild(cell);
+                }
+            }
+        }
+
+        // Set up event listeners
+        document.getElementById("up").addEventListener("click", () => movePlayer(0, -1));
+        document.getElementById("down").addEventListener("click", () => movePlayer(0, 1));
+        document.getElementById("left").addEventListener("click", () => movePlayer(-1, 0));
+        document.getElementById("right").addEventListener("click", () => movePlayer(1, 0));
+        document.getElementById("reset").addEventListener("click", () => {
+            placePlayer(START_POS.x, START_POS.y);
+            moveCount = 0;
+            updateMoveCounter();
+            gameWon = false;
+            document.getElementById('winMessage').style.display = 'none';
+            renderGrid();
+        });
+        document.getElementById("playAgain").addEventListener("click", initGame);
+
+        // Add keyboard support
+        document.addEventListener("keydown", (e) => {
+            switch (e.key) {
+                case "ArrowUp":
+                    movePlayer(0, -1);
+                    break;
+                case "ArrowDown":
+                    movePlayer(0, 1);
+                    break;
+                case "ArrowLeft":
+                    movePlayer(-1, 0);
+                    break;
+                case "ArrowRight":
+                    movePlayer(1, 0);
+                    break;
+            }
+        });
+
+        // Initialize the game when page loads
+        window.onload = initGame;
+    </script>
+</body>
+</html>
